@@ -89,7 +89,7 @@ fn parse_semester_key(key: &str) -> Result<usize, Error> {
         .ok_or_else(|| Error::InvalidSemesterKey(key.to_string()))
 }
 
-fn parse_grade(grade: &str) -> Result<Outcome, Error> {
+pub fn parse_grade(grade: &str) -> Result<Outcome, Error> {
     match grade.to_ascii_lowercase().as_str() {
         "a" => Ok(Outcome::Passed(Some(Grade::A))),
         "b" => Ok(Outcome::Passed(Some(Grade::B))),
@@ -102,7 +102,7 @@ fn parse_grade(grade: &str) -> Result<Outcome, Error> {
     }
 }
 
-fn format_grade(outcome: &Outcome) -> String {
+pub fn format_grade(outcome: &Outcome) -> String {
     match outcome {
         Outcome::Passed(Some(Grade::A)) => "A",
         Outcome::Passed(Some(Grade::B)) => "B",
