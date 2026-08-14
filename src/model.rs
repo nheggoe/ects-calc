@@ -1,8 +1,12 @@
 pub struct Subject {
     pub name: String,
     pub credit: f64,
-    pub semester: usize,
     pub result: Outcome,
+}
+
+pub struct Semester {
+    pub number: usize,
+    pub subjects: Vec<Subject>,
 }
 
 pub enum Outcome {
