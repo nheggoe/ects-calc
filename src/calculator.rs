@@ -1,45 +1,14 @@
-pub struct Subject {
-    pub name: String,
-    pub credit: f64,
-    pub semester: usize,
-    pub result: SubjectResult,
-}
+use crate::model::{Grade, Outcome, Subject};
 
-pub enum SubjectResult {
-    Passed(Option<Grade>),
-    Failed,
-}
-
-#[derive(Copy, Clone)]
-pub enum Grade {
-    A,
-    B,
-    C,
-    D,
-    E,
-}
-
-impl From<Grade> for usize {
-    fn from(grade: Grade) -> Self {
-        match grade {
-            Grade::A => 5,
-            Grade::B => 4,
-            Grade::C => 3,
-            Grade::D => 2,
-            Grade::E => 1,
-        }
-    }
-}
-
-struct CalcModel {
+struct WeightedGrade {
     grade: Grade,
     weight: f64,
 }
 
-impl From<Subject> for Option<CalcModel> {
+impl From<Subject> for Option<WeightedGrade> {
     fn from(subject: Subject) -> Self {
         match subject.result {
-            SubjectResult::Passed(Some(grade)) => Some(CalcModel {
+            Outcome::Passed(Some(grade)) => Some(WeightedGrade {
                 grade,
                 weight: subject.credit,
             }),
@@ -48,35 +17,35 @@ impl From<Subject> for Option<CalcModel> {
     }
 }
 
-fn ects_average(grades: &[CalcModel]) -> f64 {
+fn ects_average(grades: &[WeightedGrade]) -> f64 {
+    if grades.is_empty() {
+        return 0.0;
+    }
     let (weighted_credit_sum, credit_sum) = grades.iter().fold(
         (0.0, 0.0),
-        |(sum, credits), &CalcModel { grade, weight }| {
+        |(sum, credits), &WeightedGrade { grade, weight }| {
             let grade_value = usize::from(grade) as f64;
             (sum + grade_value * weight, credits + weight)
         },
     );
-    if credit_sum == 0.0 {
-        return 0.0;
-    }
     weighted_credit_sum / credit_sum
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::calculator::Grade::*;
+    use crate::model::Grade::*;
     use approx::assert_relative_eq;
 
     #[test]
     fn test_ects_average() {
-        let grades = &[CalcModel {
+        let grades = &[WeightedGrade {
             grade: A,
             weight: 10.0,
         }];
         assert_relative_eq!(ects_average(grades), 5.0);
 
-        let grades: &[CalcModel; 0] = &[];
+        let grades: &[WeightedGrade; 0] = &[];
         assert_relative_eq!(ects_average(grades), 0.0);
     }
 }
