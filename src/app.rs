@@ -6,7 +6,7 @@ use ratatui::crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Stylize;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Clear, List, ListItem, Paragraph};
+use ratatui::widgets::{Block, Clear, List, ListItem, ListState, Paragraph};
 
 pub struct App {
     pub semesters: Vec<Semester>,
@@ -427,12 +427,16 @@ pub fn render(frame: &mut Frame, app: &App) {
     let (code_width, name_width) = column_widths(&app.semesters);
     let mut items = Vec::new();
     let mut idx = 0;
+    let mut selected_item_index = None;
     for semester in &app.semesters {
         items.push(ListItem::new(
             Line::from(format!("Semester {}", semester.number)).bold(),
         ));
         for subject in &semester.subjects {
             let selected = idx == app.selected;
+            if selected {
+                selected_item_index = Some(items.len());
+            }
             let marker = if selected { "> " } else { "  " };
             let code = truncate(&subject.code, code_width);
             let name = truncate(&subject.name, name_width);
@@ -476,9 +480,12 @@ pub fn render(frame: &mut Frame, app: &App) {
         }
     }
 
-    frame.render_widget(
+    let mut list_state = ListState::default();
+    list_state.select(selected_item_index);
+    frame.render_stateful_widget(
         List::new(items).block(Block::bordered().title("ECTS Calculator")),
         list_area,
+        &mut list_state,
     );
 
     let average = calculator::overall_average(&app.semesters);
