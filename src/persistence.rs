@@ -42,8 +42,15 @@ pub enum Error {
 }
 
 pub fn default_path() -> Result<PathBuf, Error> {
-    let dirs = xdg::BaseDirectories::with_prefix("ects-calc");
-    Ok(dirs.place_data_file("subjects.toml")?)
+    let dirs = directories::ProjectDirs::from("", "", "ects-calc").ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "could not determine data directory",
+        )
+    })?;
+    let data_dir = dirs.data_dir();
+    std::fs::create_dir_all(data_dir)?;
+    Ok(data_dir.join("subjects.toml"))
 }
 
 pub fn load(path: &Path) -> Result<Vec<Semester>, Error> {
