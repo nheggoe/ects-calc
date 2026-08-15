@@ -21,14 +21,15 @@ E \mapsto 1
 \end{aligned}
 ```
 
-https://github.com/user-attachments/assets/4f8ad77e-71f3-4889-b521-56c034bab153
+https://github.com/user-attachments/assets/812bbd27-7365-4f0b-82c2-d9b4877e5453
 
 ## Installation
 
 ### Prerequisites
 - Rust toolchain
 
-### Install Locally
+### Build from source
+Installed binary will have the name `ects-calc`
 ```sh
 cd $HOME/Downloads
 git clone https://github.com/nheggoe/ects-calc.git
