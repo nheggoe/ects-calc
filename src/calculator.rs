@@ -7,6 +7,9 @@ struct WeightedGrade {
 
 impl From<&Subject> for Option<WeightedGrade> {
     fn from(subject: &Subject) -> Self {
+        if !subject.included {
+            return None;
+        }
         match subject.result {
             Outcome::Passed(Some(grade)) => Some(WeightedGrade {
                 grade,
@@ -30,7 +33,7 @@ pub fn valid_credits(semesters: &[Semester]) -> f64 {
     semesters
         .iter()
         .flat_map(|semester| &semester.subjects)
-        .filter(|subject| !matches!(subject.result, Outcome::Failed))
+        .filter(|subject| subject.included && !matches!(subject.result, Outcome::Failed))
         .map(|subject| subject.credit)
         .fold(0.0, |acc, credit| acc + credit)
 }
@@ -73,23 +76,54 @@ mod test {
             number: 1,
             subjects: vec![
                 Subject {
+                    code: "MA1".into(),
                     name: "Math".into(),
                     credit: 10.0,
                     result: Outcome::Passed(Some(A)),
+                    included: true,
                 },
                 Subject {
+                    code: "ET1".into(),
                     name: "Ethics".into(),
                     credit: 5.0,
                     result: Outcome::Passed(None),
+                    included: true,
                 },
                 Subject {
+                    code: "DB1".into(),
                     name: "Databases".into(),
                     credit: 10.0,
                     result: Outcome::Failed,
+                    included: true,
                 },
             ],
         }];
         assert_relative_eq!(valid_credits(semesters), 15.0);
+    }
+
+    #[test]
+    fn excluded_subjects_are_ignored_by_average_and_valid_credits() {
+        let semesters = &[Semester {
+            number: 1,
+            subjects: vec![
+                Subject {
+                    code: "MA1".into(),
+                    name: "Math".into(),
+                    credit: 10.0,
+                    result: Outcome::Passed(Some(A)),
+                    included: true,
+                },
+                Subject {
+                    code: "RETAKE".into(),
+                    name: "Old attempt".into(),
+                    credit: 10.0,
+                    result: Outcome::Passed(Some(E)),
+                    included: false,
+                },
+            ],
+        }];
+        assert_relative_eq!(overall_average(semesters), 5.0);
+        assert_relative_eq!(valid_credits(semesters), 10.0);
     }
 
     #[test]

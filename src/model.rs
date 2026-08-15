@@ -1,7 +1,12 @@
 pub struct Subject {
+    pub code: String,
     pub name: String,
     pub credit: f64,
     pub result: Outcome,
+    /// Whether this subject counts toward the average / valid credits.
+    /// Lets a subject be kept in the list (e.g. a retake) without affecting
+    /// the calculation.
+    pub included: bool,
 }
 
 pub struct Semester {

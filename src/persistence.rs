@@ -8,9 +8,21 @@ type Document = BTreeMap<String, Vec<TomlSubject>>;
 
 #[derive(Serialize, Deserialize)]
 struct TomlSubject {
+    #[serde(default)]
+    code: String,
     name: String,
     credit: f64,
     grade: String,
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    included: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn is_true(b: &bool) -> bool {
+    *b
 }
 
 #[derive(Debug, Error)]
@@ -53,9 +65,11 @@ fn parse_document(doc: Document) -> Result<Vec<Semester>, Error> {
                 .into_iter()
                 .map(|s| {
                     Ok(Subject {
+                        code: s.code,
                         name: s.name,
                         credit: s.credit,
                         result: parse_grade(&s.grade)?,
+                        included: s.included,
                     })
                 })
                 .collect::<Result<Vec<_>, Error>>()?;
@@ -73,9 +87,11 @@ fn to_document(semesters: &[Semester]) -> Document {
                 .subjects
                 .iter()
                 .map(|subject| TomlSubject {
+                    code: subject.code.clone(),
                     name: subject.name.clone(),
                     credit: subject.credit,
                     grade: format_grade(&subject.result),
+                    included: subject.included,
                 })
                 .collect();
             (key, subjects)
@@ -126,19 +142,25 @@ mod test {
             number: 1,
             subjects: vec![
                 Subject {
+                    code: "MA1".into(),
                     name: "Math".into(),
                     credit: 10.0,
                     result: Outcome::Passed(Some(A)),
+                    included: true,
                 },
                 Subject {
+                    code: "ET1".into(),
                     name: "Ethics".into(),
                     credit: 5.0,
                     result: Outcome::Passed(None),
+                    included: true,
                 },
                 Subject {
+                    code: "DB1".into(),
                     name: "Databases".into(),
                     credit: 10.0,
                     result: Outcome::Failed,
+                    included: false,
                 },
             ],
         }];
@@ -149,6 +171,23 @@ mod test {
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].number, 1);
         assert_eq!(parsed[0].subjects.len(), 3);
+        assert!(parsed[0].subjects[0].included);
+        assert!(!parsed[0].subjects[2].included);
+    }
+
+    #[test]
+    fn missing_included_field_defaults_to_true() {
+        let doc: Document = toml::from_str(
+            r#"
+            [[semester1]]
+            name = "Math"
+            credit = 10.0
+            grade = "A"
+            "#,
+        )
+        .unwrap();
+        let semesters = parse_document(doc).unwrap();
+        assert!(semesters[0].subjects[0].included);
     }
 
     #[test]
@@ -184,9 +223,11 @@ mod test {
         let semesters = vec![Semester {
             number: 2,
             subjects: vec![Subject {
+                code: "PH1".into(),
                 name: "Physics".into(),
                 credit: 7.5,
                 result: Outcome::Passed(Some(B)),
+                included: true,
             }],
         }];
 
