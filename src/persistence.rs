@@ -15,6 +15,8 @@ struct TomlSubject {
     grade: String,
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     included: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    potential: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -70,6 +72,7 @@ fn parse_document(doc: Document) -> Result<Vec<Semester>, Error> {
                         credit: s.credit,
                         result: parse_grade(&s.grade)?,
                         included: s.included,
+                        potential: s.potential.as_deref().map(parse_grade_letter).transpose()?,
                     })
                 })
                 .collect::<Result<Vec<_>, Error>>()?;
@@ -92,6 +95,7 @@ fn to_document(semesters: &[Semester]) -> Document {
                     credit: subject.credit,
                     grade: format_grade(&subject.result),
                     included: subject.included,
+                    potential: subject.potential.map(|g| grade_letter(g).to_string()),
                 })
                 .collect();
             (key, subjects)
@@ -120,15 +124,32 @@ pub fn parse_grade(grade: &str) -> Result<Outcome, Error> {
 
 pub fn format_grade(outcome: &Outcome) -> String {
     match outcome {
-        Outcome::Passed(Some(Grade::A)) => "A",
-        Outcome::Passed(Some(Grade::B)) => "B",
-        Outcome::Passed(Some(Grade::C)) => "C",
-        Outcome::Passed(Some(Grade::D)) => "D",
-        Outcome::Passed(Some(Grade::E)) => "E",
+        Outcome::Passed(Some(grade)) => grade_letter(*grade),
         Outcome::Passed(None) => "Pass",
         Outcome::Failed => "F",
     }
     .to_string()
+}
+
+pub fn parse_grade_letter(s: &str) -> Result<Grade, Error> {
+    match s.to_ascii_lowercase().as_str() {
+        "a" => Ok(Grade::A),
+        "b" => Ok(Grade::B),
+        "c" => Ok(Grade::C),
+        "d" => Ok(Grade::D),
+        "e" => Ok(Grade::E),
+        _ => Err(Error::InvalidGrade(s.to_string())),
+    }
+}
+
+pub fn grade_letter(grade: Grade) -> &'static str {
+    match grade {
+        Grade::A => "A",
+        Grade::B => "B",
+        Grade::C => "C",
+        Grade::D => "D",
+        Grade::E => "E",
+    }
 }
 
 #[cfg(test)]
@@ -147,6 +168,7 @@ mod test {
                     credit: 10.0,
                     result: Outcome::Passed(Some(A)),
                     included: true,
+                    potential: None,
                 },
                 Subject {
                     code: "ET1".into(),
@@ -154,6 +176,7 @@ mod test {
                     credit: 5.0,
                     result: Outcome::Passed(None),
                     included: true,
+                    potential: None,
                 },
                 Subject {
                     code: "DB1".into(),
@@ -161,6 +184,7 @@ mod test {
                     credit: 10.0,
                     result: Outcome::Failed,
                     included: false,
+                    potential: Some(C),
                 },
             ],
         }];
@@ -173,6 +197,29 @@ mod test {
         assert_eq!(parsed[0].subjects.len(), 3);
         assert!(parsed[0].subjects[0].included);
         assert!(!parsed[0].subjects[2].included);
+        assert!(parsed[0].subjects[0].potential.is_none());
+        assert!(matches!(parsed[0].subjects[2].potential, Some(C)));
+    }
+
+    #[test]
+    fn missing_potential_field_defaults_to_none() {
+        let doc: Document = toml::from_str(
+            r#"
+            [[semester1]]
+            name = "Math"
+            credit = 10.0
+            grade = "A"
+            "#,
+        )
+        .unwrap();
+        let semesters = parse_document(doc).unwrap();
+        assert!(semesters[0].subjects[0].potential.is_none());
+    }
+
+    #[test]
+    fn rejects_invalid_potential_grade() {
+        assert!(parse_grade_letter("X").is_err());
+        assert!(parse_grade_letter("Pass").is_err());
     }
 
     #[test]
@@ -228,6 +275,7 @@ mod test {
                 credit: 7.5,
                 result: Outcome::Passed(Some(B)),
                 included: true,
+                potential: Some(A),
             }],
         }];
 
@@ -239,5 +287,6 @@ mod test {
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].number, 2);
         assert_eq!(loaded[0].subjects[0].name, "Physics");
+        assert!(matches!(loaded[0].subjects[0].potential, Some(A)));
     }
 }

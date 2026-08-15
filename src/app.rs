@@ -37,6 +37,7 @@ pub struct Form {
     credit: String,
     semester: String,
     grade: String,
+    potential: String,
     editing: Option<usize>,
     error: Option<String>,
 }
@@ -50,6 +51,7 @@ impl Form {
             credit: "7.5".to_string(),
             semester: default_semester.to_string(),
             grade: String::new(),
+            potential: String::new(),
             editing: None,
             error: None,
         }
@@ -63,6 +65,11 @@ impl Form {
             credit: subject.credit.to_string(),
             semester: semester.to_string(),
             grade: persistence::format_grade(&subject.result).to_uppercase(),
+            potential: subject
+                .potential
+                .map(persistence::grade_letter)
+                .unwrap_or_default()
+                .to_string(),
             editing: Some(flat_index),
             error: None,
         }
@@ -75,13 +82,14 @@ impl Form {
             Field::Credit => &mut self.credit,
             Field::Semester => &mut self.semester,
             Field::Grade => &mut self.grade,
+            Field::Potential => &mut self.potential,
         }
     }
 
     /// Appends a typed character, uppercasing it first for fields that are
-    /// always displayed in caps (subject code, grade).
+    /// always displayed in caps (subject code, grade, potential grade).
     fn push_char(&mut self, c: char) {
-        let c = if matches!(self.field, Field::Code | Field::Grade) {
+        let c = if matches!(self.field, Field::Code | Field::Grade | Field::Potential) {
             c.to_ascii_uppercase()
         } else {
             c
@@ -97,6 +105,7 @@ enum Field {
     Credit,
     Semester,
     Grade,
+    Potential,
 }
 
 impl Field {
@@ -104,7 +113,8 @@ impl Field {
         match self {
             Field::Code => Field::Name,
             Field::Name => Field::Grade,
-            Field::Grade => Field::Semester,
+            Field::Grade => Field::Potential,
+            Field::Potential => Field::Semester,
             Field::Semester => Field::Credit,
             Field::Credit => Field::Code,
         }
@@ -115,7 +125,8 @@ impl Field {
             Field::Code => Field::Credit,
             Field::Name => Field::Code,
             Field::Grade => Field::Name,
-            Field::Semester => Field::Grade,
+            Field::Potential => Field::Grade,
+            Field::Semester => Field::Potential,
             Field::Credit => Field::Semester,
         }
     }
@@ -242,6 +253,7 @@ fn submit_form(app: &mut App) -> Response {
     let credit_input = form.credit.trim().to_string();
     let semester_input = form.semester.trim().to_string();
     let grade_input = form.grade.trim().to_string();
+    let potential_input = form.potential.trim().to_string();
     let editing = form.editing;
 
     let credit: f64 = match credit_input.parse() {
@@ -265,6 +277,17 @@ fn submit_form(app: &mut App) -> Response {
             return Response::None;
         }
     };
+    let potential = if potential_input.is_empty() {
+        None
+    } else {
+        match persistence::parse_grade_letter(&potential_input) {
+            Ok(g) => Some(g),
+            Err(_) => {
+                set_form_error(app, "potential grade must be A-E");
+                return Response::None;
+            }
+        }
+    };
 
     let mut included = true;
     let mut old_location = None;
@@ -281,6 +304,7 @@ fn submit_form(app: &mut App) -> Response {
         credit,
         result,
         included,
+        potential,
     };
 
     match old_location {
@@ -412,10 +436,14 @@ pub fn render(frame: &mut Frame, app: &App) {
             let marker = if selected { "> " } else { "  " };
             let code = truncate(&subject.code, code_width);
             let name = truncate(&subject.name, name_width);
+            let grade = persistence::format_grade(&subject.result);
+            let grade = match subject.potential {
+                Some(potential) => format!("{grade} → {}", persistence::grade_letter(potential)),
+                None => grade,
+            };
             let text = format!(
-                "{marker}{code:<code_width$} {name:<name_width$} {:>5.1} ECTS  {}",
+                "{marker}{code:<code_width$} {name:<name_width$} {:>5.1} ECTS  {grade}",
                 subject.credit,
-                persistence::format_grade(&subject.result)
             );
             let mut line = Line::from(text);
             if !subject.included {
@@ -436,10 +464,19 @@ pub fn render(frame: &mut Frame, app: &App) {
 
     let average = calculator::overall_average(&app.semesters);
     let valid = calculator::valid_credits(&app.semesters);
+    let has_potential = app
+        .semesters
+        .iter()
+        .flat_map(|s| &s.subjects)
+        .any(|s| s.potential.is_some());
+    let average_text = if has_potential {
+        let potential = calculator::potential_average(&app.semesters);
+        format!("Average: {average:.2} → {potential:.2}")
+    } else {
+        format!("Average: {average:.2}")
+    };
     frame.render_widget(
-        Paragraph::new(format!(
-            "Average: {average:.2}   Valid credits: {valid:.1} ECTS"
-        )),
+        Paragraph::new(format!("{average_text}   Valid credits: {valid:.1} ECTS")),
         stats_area,
     );
     frame.render_widget(
@@ -472,6 +509,7 @@ fn render_form(frame: &mut Frame, form: &Form, title: &str) {
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
+        Constraint::Length(1),
     ])
     .split(inner);
 
@@ -488,25 +526,29 @@ fn render_form(frame: &mut Frame, form: &Form, title: &str) {
         rows[2],
     );
     frame.render_widget(
-        field_line("Semester", &form.semester, form.field == Field::Semester),
+        field_line("Potential", &form.potential, form.field == Field::Potential),
         rows[3],
     );
     frame.render_widget(
-        field_line("Credit", &form.credit, form.field == Field::Credit),
+        field_line("Semester", &form.semester, form.field == Field::Semester),
         rows[4],
     );
     frame.render_widget(
-        Paragraph::new(form.error.clone().unwrap_or_default()).red(),
+        field_line("Credit", &form.credit, form.field == Field::Credit),
         rows[5],
     );
     frame.render_widget(
-        Paragraph::new("Tab: next field   Enter: save   Esc: cancel"),
+        Paragraph::new(form.error.clone().unwrap_or_default()).red(),
         rows[6],
+    );
+    frame.render_widget(
+        Paragraph::new("Tab: next field   Enter: save   Esc: cancel"),
+        rows[7],
     );
 }
 
 fn field_line(label: &str, value: &str, focused: bool) -> Paragraph<'static> {
-    let text = format!("{label:<9}{value}");
+    let text = format!("{label:<10}{value}");
     let paragraph = Paragraph::new(text);
     if focused {
         paragraph.reversed()

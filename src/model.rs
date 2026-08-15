@@ -7,6 +7,9 @@ pub struct Subject {
     /// Lets a subject be kept in the list (e.g. a retake) without affecting
     /// the calculation.
     pub included: bool,
+    /// A hypothetical grade (e.g. from a planned retake) shown alongside the
+    /// actual one and factored into the potential average.
+    pub potential: Option<Grade>,
 }
 
 pub struct Semester {

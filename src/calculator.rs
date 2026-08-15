@@ -29,6 +29,28 @@ pub fn overall_average(semesters: &[Semester]) -> f64 {
     ects_average(&grades)
 }
 
+/// Same as `overall_average`, but a subject's `potential` grade (if set)
+/// stands in for its actual one — including turning a currently-failed or
+/// not-yet-passed subject into a graded one, as a "what if" projection.
+pub fn potential_average(semesters: &[Semester]) -> f64 {
+    let grades: Vec<WeightedGrade> = semesters
+        .iter()
+        .flat_map(|semester| &semester.subjects)
+        .filter(|subject| subject.included)
+        .filter_map(|subject| {
+            let grade = subject.potential.or(match subject.result {
+                Outcome::Passed(Some(grade)) => Some(grade),
+                _ => None,
+            })?;
+            Some(WeightedGrade {
+                grade,
+                weight: subject.credit,
+            })
+        })
+        .collect();
+    ects_average(&grades)
+}
+
 pub fn valid_credits(semesters: &[Semester]) -> f64 {
     semesters
         .iter()
@@ -81,6 +103,7 @@ mod test {
                     credit: 10.0,
                     result: Outcome::Passed(Some(A)),
                     included: true,
+                    potential: None,
                 },
                 Subject {
                     code: "ET1".into(),
@@ -88,6 +111,7 @@ mod test {
                     credit: 5.0,
                     result: Outcome::Passed(None),
                     included: true,
+                    potential: None,
                 },
                 Subject {
                     code: "DB1".into(),
@@ -95,6 +119,7 @@ mod test {
                     credit: 10.0,
                     result: Outcome::Failed,
                     included: true,
+                    potential: None,
                 },
             ],
         }];
@@ -112,6 +137,7 @@ mod test {
                     credit: 10.0,
                     result: Outcome::Passed(Some(A)),
                     included: true,
+                    potential: None,
                 },
                 Subject {
                     code: "RETAKE".into(),
@@ -119,6 +145,7 @@ mod test {
                     credit: 10.0,
                     result: Outcome::Passed(Some(E)),
                     included: false,
+                    potential: None,
                 },
             ],
         }];
@@ -131,5 +158,65 @@ mod test {
         let credits = valid_credits(&[]);
         assert_relative_eq!(credits, 0.0);
         assert!(!credits.is_sign_negative());
+    }
+
+    #[test]
+    fn potential_average_uses_potential_grade_when_set() {
+        let semesters = &[Semester {
+            number: 1,
+            subjects: vec![
+                Subject {
+                    code: "MA1".into(),
+                    name: "Math".into(),
+                    credit: 10.0,
+                    result: Outcome::Passed(Some(C)),
+                    included: true,
+                    potential: Some(A),
+                },
+                Subject {
+                    code: "ET1".into(),
+                    name: "Ethics".into(),
+                    credit: 10.0,
+                    result: Outcome::Passed(Some(C)),
+                    included: true,
+                    potential: None,
+                },
+            ],
+        }];
+        assert_relative_eq!(overall_average(semesters), 3.0);
+        assert_relative_eq!(potential_average(semesters), 4.0);
+    }
+
+    #[test]
+    fn potential_average_can_turn_a_failed_subject_into_a_pass() {
+        let semesters = &[Semester {
+            number: 1,
+            subjects: vec![Subject {
+                code: "DB1".into(),
+                name: "Databases".into(),
+                credit: 10.0,
+                result: Outcome::Failed,
+                included: true,
+                potential: Some(D),
+            }],
+        }];
+        assert_relative_eq!(overall_average(semesters), 0.0);
+        assert_relative_eq!(potential_average(semesters), 2.0);
+    }
+
+    #[test]
+    fn potential_average_matches_actual_when_nothing_is_set() {
+        let semesters = &[Semester {
+            number: 1,
+            subjects: vec![Subject {
+                code: "MA1".into(),
+                name: "Math".into(),
+                credit: 10.0,
+                result: Outcome::Passed(Some(B)),
+                included: true,
+                potential: None,
+            }],
+        }];
+        assert_relative_eq!(potential_average(semesters), overall_average(semesters));
     }
 }
