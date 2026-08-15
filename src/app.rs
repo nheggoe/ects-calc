@@ -1,11 +1,11 @@
 use crate::calculator;
-use crate::model::{Semester, Subject};
+use crate::model::{Outcome, Semester, Subject};
 use crate::persistence;
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Stylize;
-use ratatui::text::Line;
+use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, List, ListItem, Paragraph};
 
 pub struct App {
@@ -436,16 +436,35 @@ pub fn render(frame: &mut Frame, app: &App) {
             let marker = if selected { "> " } else { "  " };
             let code = truncate(&subject.code, code_width);
             let name = truncate(&subject.name, name_width);
-            let grade = persistence::format_grade(&subject.result);
-            let grade = match subject.potential {
-                Some(potential) => format!("{grade} → {}", persistence::grade_letter(potential)),
-                None => grade,
+            let mut grade = persistence::format_grade(&subject.result);
+            if let Some(potential) = subject.potential {
+                grade = format!("{grade} → {}", persistence::grade_letter(potential));
+            }
+            // "Pass" and "F" never carry a grade point, so they never factor
+            // into the average — mark that distinctly from the included
+            // toggle (which is a manual, whole-row exclusion).
+            let grade_span = match subject.result {
+                Outcome::Passed(None) => Span::from(grade).blue(),
+                Outcome::Failed => Span::from(grade).red(),
+                Outcome::Passed(Some(_)) => Span::from(grade),
             };
-            let text = format!(
-                "{marker}{code:<code_width$} {name:<name_width$} {:>5.1} ECTS  {grade}",
-                subject.credit,
-            );
-            let mut line = Line::from(text);
+            let failed = matches!(subject.result, Outcome::Failed);
+            let label = format!("{marker}{code:<code_width$} {name:<name_width$} ");
+            let credit_number = format!("{:.1}", subject.credit);
+            let credit_padding = " ".repeat(5usize.saturating_sub(credit_number.chars().count()));
+            let credit_text = format!("{credit_number} ECTS");
+            let credit_span = if failed {
+                Span::from(credit_text).red().crossed_out()
+            } else {
+                Span::from(credit_text)
+            };
+            let mut line = Line::from(vec![
+                Span::from(label),
+                Span::from(credit_padding),
+                credit_span,
+                Span::from("  "),
+                grade_span,
+            ]);
             if !subject.included {
                 line = line.crossed_out().dim();
             }
@@ -458,25 +477,28 @@ pub fn render(frame: &mut Frame, app: &App) {
     }
 
     frame.render_widget(
-        List::new(items).block(Block::bordered().title("ects-calc")),
+        List::new(items).block(Block::bordered().title("ECTS Calculator")),
         list_area,
     );
 
     let average = calculator::overall_average(&app.semesters);
-    let valid = calculator::valid_credits(&app.semesters);
-    let has_potential = app
-        .semesters
-        .iter()
-        .flat_map(|s| &s.subjects)
-        .any(|s| s.potential.is_some());
-    let average_text = if has_potential {
-        let potential = calculator::potential_average(&app.semesters);
-        format!("Average: {average:.2} → {potential:.2}")
+    let potential_average = calculator::potential_average(&app.semesters);
+    let average_text = if potential_average != average {
+        format!("Average: {average:.2} → {potential_average:.2}")
     } else {
         format!("Average: {average:.2}")
     };
+
+    let valid = calculator::valid_credits(&app.semesters);
+    let potential_valid = calculator::potential_valid_credits(&app.semesters);
+    let valid_text = if potential_valid != valid {
+        format!("Valid credits: {valid:.1} → {potential_valid:.1} ECTS")
+    } else {
+        format!("Valid credits: {valid:.1} ECTS")
+    };
+
     frame.render_widget(
-        Paragraph::new(format!("{average_text}   Valid credits: {valid:.1} ECTS")),
+        Paragraph::new(format!("{average_text}   {valid_text}")),
         stats_area,
     );
     frame.render_widget(

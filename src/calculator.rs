@@ -60,6 +60,19 @@ pub fn valid_credits(semesters: &[Semester]) -> f64 {
         .fold(0.0, |acc, credit| acc + credit)
 }
 
+/// Same as `valid_credits`, but a failed subject with a `potential` grade
+/// set counts too — projecting the credits earned if that "what if" grade
+/// came true.
+pub fn potential_valid_credits(semesters: &[Semester]) -> f64 {
+    semesters
+        .iter()
+        .flat_map(|semester| &semester.subjects)
+        .filter(|subject| subject.included)
+        .filter(|subject| !matches!(subject.result, Outcome::Failed) || subject.potential.is_some())
+        .map(|subject| subject.credit)
+        .fold(0.0, |acc, credit| acc + credit)
+}
+
 fn ects_average(grades: &[WeightedGrade]) -> f64 {
     if grades.is_empty() {
         return 0.0;
@@ -218,5 +231,56 @@ mod test {
             }],
         }];
         assert_relative_eq!(potential_average(semesters), overall_average(semesters));
+    }
+
+    #[test]
+    fn potential_valid_credits_counts_a_failed_subject_with_a_potential_grade() {
+        let semesters = &[Semester {
+            number: 1,
+            subjects: vec![
+                Subject {
+                    code: "MA1".into(),
+                    name: "Math".into(),
+                    credit: 10.0,
+                    result: Outcome::Passed(Some(A)),
+                    included: true,
+                    potential: None,
+                },
+                Subject {
+                    code: "DB1".into(),
+                    name: "Databases".into(),
+                    credit: 5.0,
+                    result: Outcome::Failed,
+                    included: true,
+                    potential: Some(D),
+                },
+                Subject {
+                    code: "ET1".into(),
+                    name: "Ethics".into(),
+                    credit: 7.0,
+                    result: Outcome::Failed,
+                    included: true,
+                    potential: None,
+                },
+            ],
+        }];
+        assert_relative_eq!(valid_credits(semesters), 10.0);
+        assert_relative_eq!(potential_valid_credits(semesters), 15.0);
+    }
+
+    #[test]
+    fn potential_valid_credits_matches_actual_when_nothing_is_set() {
+        let semesters = &[Semester {
+            number: 1,
+            subjects: vec![Subject {
+                code: "MA1".into(),
+                name: "Math".into(),
+                credit: 10.0,
+                result: Outcome::Passed(Some(B)),
+                included: true,
+                potential: None,
+            }],
+        }];
+        assert_relative_eq!(potential_valid_credits(semesters), valid_credits(semesters));
     }
 }
