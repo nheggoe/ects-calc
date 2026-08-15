@@ -1,4 +1,4 @@
-Dead simple ECTS calcualtor, using the formula:
+Dead simple ECTS calculator, using the formula:
 
 ```math
 \begin{aligned}
@@ -26,13 +26,13 @@ https://github.com/user-attachments/assets/812bbd27-7365-4f0b-82c2-d9b4877e5453
 ## Installation
 
 ### Prerequisites
-- Rust toolchain
+
+- [Rust toolchain](https://rustup.rs/)
 
 ### Build from source
+
 Installed binary will have the name `ects-calc`
+
 ```sh
-cd $HOME/Downloads
-git clone https://github.com/nheggoe/ects-calc.git
-cd ects-calc
-cargo install --path .
+cargo install --git https://github.com/nheggoe/ects-calc.git
 ```
